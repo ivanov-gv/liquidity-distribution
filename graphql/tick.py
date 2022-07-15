@@ -1,8 +1,11 @@
 import requests
 
+from utils import raw_price_to_price_token0
+
 
 def get_ticks(pool_address: str, tick_lower_bound: int, tick_upper_bound: int,
-              date_lower_bound: int, date_upper_bound: int) -> list:
+              date_lower_bound: int, date_upper_bound: int,
+              token0_decimals: int, token1_decimals: int) -> list:
     """
 
     :param pool_address:
@@ -10,6 +13,8 @@ def get_ticks(pool_address: str, tick_lower_bound: int, tick_upper_bound: int,
     :param tick_upper_bound:
     :param date_lower_bound:
     :param date_upper_bound:
+    :param token0_decimals:
+    :param token1_decimals:
     :return: list of ticks with pool day data
     """
 
@@ -57,6 +62,10 @@ def get_ticks(pool_address: str, tick_lower_bound: int, tick_upper_bound: int,
     for tick in tick_list:
         tick['price0'] = float(tick['tick']['price0'])
         tick['price1'] = float(tick['tick']['price1'])
+
+        # Convert raw prices to actual ones
+        tick['price0'] = raw_price_to_price_token0(token0_decimals, token1_decimals, tick['price0'])
+        tick['price1'] = 1 / tick['price0']
 
         tick['liquidityNet'] = int(tick['tick']['liquidityNet'])
         tick['liquidityGross'] = int(tick['tick']['liquidityGross'])
