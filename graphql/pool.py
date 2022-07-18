@@ -42,7 +42,7 @@ def get_pool_info(pool_address: str) -> dict:
     return pool_data
 
 
-def get_pool_day_data(pool_address: str, date_lower_bound: int, date_upper_bound: int) -> list:
+def get_pool_day_data(pool_address: str, date_lower_bound: int, date_upper_bound: int) -> list[dict]:
     """
 
     :param pool_address:
@@ -52,9 +52,9 @@ def get_pool_day_data(pool_address: str, date_lower_bound: int, date_upper_bound
     """
 
     query = ''' 
-      {
+      {{
         poolDayDatas(
-          first: 1,
+          first: 100,
           where: {{
             pool: "{pool_address}",
             date_lte: {date_lte}, 
@@ -63,8 +63,9 @@ def get_pool_day_data(pool_address: str, date_lower_bound: int, date_upper_bound
         {{
           date
           tick
+          liquidity
         }}
-      }'''.format(pool_address=pool_address,
+      }}'''.format(pool_address=pool_address,
                   date_lte=date_upper_bound,
                   date_gte=date_lower_bound)
 
@@ -81,5 +82,6 @@ def get_pool_day_data(pool_address: str, date_lower_bound: int, date_upper_bound
     # Convert tick str to int
     for data in pool_data_list:
         data['tick'] = int(data['tick'])
+        data['liquidity'] = int(data['liquidity'])
 
     return pool_data_list

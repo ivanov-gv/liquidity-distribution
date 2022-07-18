@@ -5,7 +5,7 @@ from utils import raw_price_to_price_token0
 
 def get_ticks(pool_address: str, tick_lower_bound: int, tick_upper_bound: int,
               date_lower_bound: int, date_upper_bound: int,
-              token0_decimals: int, token1_decimals: int) -> list:
+              token0_decimals: int, token1_decimals: int) -> list[dict]:
     """
 
     :param pool_address:
@@ -40,7 +40,7 @@ def get_ticks(pool_address: str, tick_lower_bound: int, tick_upper_bound: int,
               tickIdx
             }}
           }}
-        }} '''.format(first=100,
+        }} '''.format(first=200,
                       skip=0,
                       pool=pool_address,
                       date_lte=date_upper_bound,
