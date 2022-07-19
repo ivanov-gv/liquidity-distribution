@@ -1,3 +1,5 @@
+import datetime
+
 import requests
 
 from utils import raw_price_to_price_token0, raw_liquidity_to_token0_token1
@@ -61,6 +63,7 @@ def get_ticks(pool_address: str, tick_spacing: int,
 
     raw_liquidity = 0
     for tick in tick_list:
+        tick['readable_date'] = str(datetime.date.fromtimestamp(tick['date']))
         tick['price0'] = float(tick['tick']['price0'])
         tick['price1'] = float(tick['tick']['price1'])
 
