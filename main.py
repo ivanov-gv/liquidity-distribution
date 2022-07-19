@@ -13,5 +13,5 @@ if __name__ == "__main__":
     liquidity_data = get_liquidity_distribution_data(pool_address, from_date, to_date, num_surrounding_ticks)
 
     # plotting
-    fig = px.line(liquidity_data, x="price0", y="liquidity", animation_frame="date")
+    fig = px.bar(liquidity_data, x="price0", y="liquidity", animation_frame="date", color="active_price")
     fig.show()

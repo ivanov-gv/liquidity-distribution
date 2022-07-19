@@ -69,8 +69,8 @@ def get_pool_day_data(pool_address: str, date_lower_bound: int, date_upper_bound
           liquidity
         }}
       }}'''.format(pool_address=pool_address,
-                  date_lte=date_upper_bound,
-                  date_gte=date_lower_bound)
+                   date_lte=date_upper_bound,
+                   date_gte=date_lower_bound)
 
     response = requests.post('https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3', json={'query': query})
 

@@ -1,9 +1,10 @@
 import requests
 
-from utils import raw_price_to_price_token0
+from utils import raw_price_to_price_token0, raw_liquidity_to_token0_token1
 
 
-def get_ticks(pool_address: str, tick_lower_bound: int, tick_upper_bound: int,
+def get_ticks(pool_address: str, tick_spacing: int,
+              tick_lower_bound: int, tick_upper_bound: int,
               date_lower_bound: int, date_upper_bound: int,
               token0_decimals: int, token1_decimals: int) -> list[dict]:
     """
@@ -58,7 +59,7 @@ def get_ticks(pool_address: str, tick_lower_bound: int, tick_upper_bound: int,
     if not tick_list:
         return []
 
-    # Move fields from underlying 'tick' dictionary and convert fields to proper types
+    raw_liquidity = 0
     for tick in tick_list:
         tick['price0'] = float(tick['tick']['price0'])
         tick['price1'] = float(tick['tick']['price1'])
@@ -71,6 +72,10 @@ def get_ticks(pool_address: str, tick_lower_bound: int, tick_upper_bound: int,
         tick['liquidityGross'] = int(tick['tick']['liquidityGross'])
         tick['createdAtTimestamp'] = int(tick['tick']['createdAtTimestamp'])
         tick['tickIdx'] = int(tick['tick']['tickIdx'])
+
+        raw_liquidity += tick['liquidityNet']
+        tick['liquidity'], _ = raw_liquidity_to_token0_token1(raw_liquidity, tick['tickIdx'], tick_spacing,
+                                                              token0_decimals, token1_decimals)
 
         del tick['tick']
 
