@@ -1,5 +1,7 @@
 import requests
 
+from utils import tick_to_price_token0
+
 
 def get_pool_info(pool_address: str) -> dict:
     """
@@ -42,7 +44,8 @@ def get_pool_info(pool_address: str) -> dict:
     return pool_data
 
 
-def get_pool_day_data(pool_address: str, date_lower_bound: int, date_upper_bound: int) -> list[dict]:
+def get_pool_day_data(pool_address: str, date_lower_bound: int, date_upper_bound: int,
+                      token0_decimals: int, token1_decimals: int) -> list[dict]:
     """
 
     :param pool_address:
@@ -79,9 +82,9 @@ def get_pool_day_data(pool_address: str, date_lower_bound: int, date_upper_bound
     if not pool_data_list:
         return []
 
-    # Convert tick str to int
     for data in pool_data_list:
         data['tick'] = int(data['tick'])
         data['liquidity'] = int(data['liquidity'])
+        data['current_price'] = tick_to_price_token0(data['tick'], token0_decimals, token1_decimals)
 
     return pool_data_list

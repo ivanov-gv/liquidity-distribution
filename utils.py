@@ -25,4 +25,4 @@ def tick_to_price_token0(tick: int, decimals_token0: int, decimals_token1: int) 
 
 
 def get_active_tick(current_tick: int, tick_spacing: int) -> int:
-    return floor(current_tick / tick_spacing) * tick_spacing
+    return floor(current_tick // tick_spacing) * tick_spacing
