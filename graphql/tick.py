@@ -2,7 +2,7 @@ import datetime
 
 import requests
 
-from utils import raw_price_to_price_token0, raw_liquidity_to_token0_token1
+from utils import raw_price_to_price_token0, liquidity_to_token0_token1
 
 
 def get_ticks(pool_address: str, tick_spacing: int,
@@ -38,8 +38,6 @@ def get_ticks(pool_address: str, tick_spacing: int,
               price0,
               price1,
               liquidityNet,
-              liquidityGross,
-              createdAtTimestamp,
               tickIdx
             }}
           }}
@@ -61,9 +59,11 @@ def get_ticks(pool_address: str, tick_spacing: int,
     if not tick_list:
         return []
 
-    raw_liquidity = 0
+    liquidity = 0
     for tick in tick_list:
         tick['readable_date'] = str(datetime.date.fromtimestamp(tick['date']))
+        tick['liquidityNet'] = int(tick['tick']['liquidityNet'])
+        tick['tickIdx'] = int(tick['tick']['tickIdx'])
         tick['price0'] = float(tick['tick']['price0'])
         tick['price1'] = float(tick['tick']['price1'])
 
@@ -71,14 +71,11 @@ def get_ticks(pool_address: str, tick_spacing: int,
         tick['price0'] = raw_price_to_price_token0(token0_decimals, token1_decimals, tick['price0'])
         tick['price1'] = 1 / tick['price0']
 
-        tick['liquidityNet'] = int(tick['tick']['liquidityNet'])
-        tick['liquidityGross'] = int(tick['tick']['liquidityGross'])
-        tick['createdAtTimestamp'] = int(tick['tick']['createdAtTimestamp'])
-        tick['tickIdx'] = int(tick['tick']['tickIdx'])
-
-        raw_liquidity += tick['liquidityNet']
-        tick['liquidity'], _ = raw_liquidity_to_token0_token1(raw_liquidity, tick['tickIdx'], tick_spacing,
-                                                              token0_decimals, token1_decimals)
+        # Calculate adjusted liquidity in tick
+        liquidity += tick['liquidityNet']
+        tick['liquidity'], _ = liquidity_to_token0_token1(liquidity,
+                                                          tick['tickIdx'], tick['tickIdx'] + tick_spacing,
+                                                          token0_decimals, token1_decimals)
 
         del tick['tick']
 

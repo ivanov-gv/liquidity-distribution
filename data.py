@@ -22,7 +22,8 @@ def get_liquidity_distribution_data(pool_address: str, from_date: datetime, to_d
     from_timestamp = int(from_date.timestamp()) // 86400 * 86400
     to_timestamp = int(to_date.timestamp()) // 86400 * 86400
 
-    pool_current_ticks = get_pool_day_data(pool_address, from_timestamp, to_timestamp,
+    pool_current_ticks = get_pool_day_data(pool_address, tick_spacing,
+                                           from_timestamp, to_timestamp,
                                            pool_info['token0']['decimals'], pool_info['token1']['decimals'])
 
     liquidity_df = pd.DataFrame()
@@ -42,17 +43,16 @@ def get_liquidity_distribution_data(pool_address: str, from_date: datetime, to_d
                                     active_tick['date'], active_tick['date'],
                                     pool_info['token0']['decimals'], pool_info['token1']['decimals'])
 
-        # build dataframe and normalize liquidity values to fit [0, 1]
         liquidity_ticks_df = pd.DataFrame(liquidity_ticks)
-        max_liquidity = liquidity_ticks_df['liquidity'].max()
-        min_liquidity = liquidity_ticks_df['liquidity'].min()
+        nearest_using_tick = liquidity_ticks_df.loc[liquidity_ticks_df.tickIdx <= active_tick['tick'], 'tickIdx'].max()
+        calculated_liquidity = liquidity_ticks_df.loc[liquidity_ticks_df.tickIdx == nearest_using_tick]\
+            .iloc[0]['liquidity']
         liquidity_ticks_df['liquidity'] = liquidity_ticks_df['liquidity'] \
-            .map(lambda x: (x - min_liquidity) / (max_liquidity - min_liquidity))
+            .map(lambda x: x - calculated_liquidity + active_tick['liquidity'])
 
         # mark the bar with current active price
         liquidity_ticks_df['active_price'] = False
-        liquidity_ticks_df.loc[
-            liquidity_ticks_df.tickIdx == active_tick['tick'], ('active_price', 'liquidity')] = True, 1.0
+        liquidity_ticks_df.loc[liquidity_ticks_df.tickIdx == active_tick['tick'], 'active_price'] = True
 
         liquidity_df = pd.concat((liquidity_df, liquidity_ticks_df))
 
