@@ -52,7 +52,7 @@ def get_liquidity_distribution_data(pool_address: str, from_date: datetime, to_d
 
         # mark the bar with current active price
         liquidity_ticks_df['active_price'] = False
-        liquidity_ticks_df.loc[liquidity_ticks_df.tickIdx == active_tick['tick'], 'active_price'] = True
+        liquidity_ticks_df.loc[liquidity_ticks_df.tickIdx == nearest_using_tick, 'active_price'] = True
 
         liquidity_df = pd.concat((liquidity_df, liquidity_ticks_df))
 
