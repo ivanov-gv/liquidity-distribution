@@ -12,6 +12,7 @@ def get_ticks(pool_address: str, tick_spacing: int,
     """
 
     :param pool_address:
+    :param tick_spacing:
     :param tick_lower_bound:
     :param tick_upper_bound:
     :param date_lower_bound:
@@ -78,5 +79,60 @@ def get_ticks(pool_address: str, tick_spacing: int,
                                                           token0_decimals, token1_decimals)
 
         del tick['tick']
+
+    return tick_list
+
+
+def get_current_ticks(pool_address: str, tick_spacing: int,
+                      tick_lower_bound: int, tick_upper_bound: int,
+                      token0_decimals: int, token1_decimals: int) -> list[dict]:
+
+    query = ''' 
+        {{
+          ticks(
+            first: {first},
+            skip: {skip},
+            where: {{
+              pool: "{pool}",
+              tickIdx_lte: "{tick_lte}",
+              tickIdx_gte: "{tick_gte}"
+            }}) {{
+              price0,
+              price1,
+              liquidityNet,
+              tickIdx
+          }}
+        }} '''.format(first=400,
+                      skip=0,
+                      pool=pool_address,
+                      tick_lte=tick_upper_bound,
+                      tick_gte=tick_lower_bound)
+
+    response = requests.post('https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3', json={'query': query})
+
+    if response.status_code != 200:
+        raise RuntimeError(f"Response statuscode is not ok: {response.status_code}")
+
+    tick_list = response.json()['data']['ticks']
+
+    if not tick_list:
+        return []
+
+    liquidity = 0
+    for tick in tick_list:
+        tick['liquidityNet'] = int(tick['liquidityNet'])
+        tick['tickIdx'] = int(tick['tickIdx'])
+        tick['price0'] = float(tick['price0'])
+        tick['price1'] = float(tick['price1'])
+
+        # Convert raw prices to actual ones
+        tick['price0'] = raw_price_to_price_token0(token0_decimals, token1_decimals, tick['price0'])
+        tick['price1'] = 1 / tick['price0']
+
+        # Calculate adjusted liquidity in tick
+        liquidity += tick['liquidityNet']
+        tick['liquidity'], _ = liquidity_to_token0_token1(liquidity,
+                                                          tick['tickIdx'], tick['tickIdx'] + tick_spacing,
+                                                          token0_decimals, token1_decimals)
 
     return tick_list

@@ -1,6 +1,6 @@
 import plotly.express as px
 
-from data import get_liquidity_distribution_data
+from data import *
 from datetime import datetime
 
 if __name__ == "__main__":
