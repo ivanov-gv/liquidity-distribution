@@ -1,4 +1,5 @@
 from math import floor
+from typing import Union
 
 feetier_to_tickspacing_dict = {
     100: 1,
@@ -50,3 +51,7 @@ def liquidity_to_token0_token1(liquidity: int,
     adj_amount0 = amount0 / (10 ** decimals0)
     adj_amount1 = amount1 / (10 ** decimals1)
     return adj_amount0, adj_amount1
+
+
+def round_timestamp_to_day(timestamp: Union[float, int]) -> int:
+    return int(timestamp) // 86400 * 86400

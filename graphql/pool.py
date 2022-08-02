@@ -92,7 +92,7 @@ def get_pool_day_data(pool_address: str, tick_spacing: int,
         # recalculate liquidity to adjusted
         lower_tick = get_active_tick(data['tick'], tick_spacing)
         upper_tick = lower_tick + tick_spacing
-        data['liquidity'], _ = liquidity_to_token0_token1(data['liquidity'], lower_tick, upper_tick,
-                                                          token0_decimals, token1_decimals)
+        data['liquidityAdj'], _ = liquidity_to_token0_token1(data['liquidity'], lower_tick, upper_tick,
+                                                             token0_decimals, token1_decimals)
 
     return pool_data_list
