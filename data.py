@@ -6,8 +6,8 @@ from datetime import datetime
 import pandas as pd
 
 
-def get_liquidity_distribution_data(pool_address: str, from_date: datetime, to_date: datetime,
-                                    num_surrounding_ticks: int) -> pd.DataFrame:
+def get_liquidity_distribution_for_period(pool_address: str, from_date: datetime, to_date: datetime,
+                                          num_surrounding_ticks: int) -> pd.DataFrame:
     """
     Get dataframe with all the data needed to draw histogram
     :param pool_address:
@@ -59,7 +59,7 @@ def get_liquidity_distribution_data(pool_address: str, from_date: datetime, to_d
     return liquidity_df
 
 
-def liquidity_distribution_right_now(pool_address: str, num_surrounding_ticks: int) -> pd.DataFrame:
+def get_liquidity_distribution_for_today(pool_address: str, num_surrounding_ticks: int) -> pd.DataFrame:
     """
 
     :param pool_address:
@@ -93,3 +93,59 @@ def liquidity_distribution_right_now(pool_address: str, num_surrounding_ticks: i
     liquidity_ticks_df.loc[liquidity_ticks_df.tickIdx == nearest_using_tick, 'active_price'] = True
 
     return liquidity_ticks_df
+
+
+def get_liquidity_distribution_full(pool_address: str) -> pd.DataFrame:
+    pool_info = get_pool_info(pool_address)
+    tick_spacing = feetier_to_tickspacing(pool_info['feeTier'])
+    active_tick = get_active_tick(pool_info['tick'], tick_spacing)
+    token0_decimals = pool_info['token0']['decimals']
+    token1_decimals = pool_info['token1']['decimals']
+    active_tick_liquidity, _ = liquidity_to_token0_token1(pool_info['liquidity'],
+                                                          active_tick, active_tick + tick_spacing,
+                                                          token0_decimals, token1_decimals)
+
+    today_timestamp = int(datetime(year=2021, month=4, day=25).timestamp()) // 86400 * 86400
+
+    tick_list = get_ticks(pool_address, tick_spacing,
+                          tick_lower_bound=0, tick_upper_bound=200 * tick_spacing,
+                          date_lower_bound=today_timestamp, date_upper_bound=today_timestamp,
+                          token0_decimals=token0_decimals, token1_decimals=token1_decimals)
+
+    current_tick = tick_list[0]
+    tick_list = tick_list[1:]
+    final_tick_list = []
+    liquidity_raw = 0
+    liquidity_sum = 0
+
+    while tick_list:
+        for next_tick in tick_list:
+            liquidity_raw += current_tick['liquidityNet']
+            liquidity_adj, _ = liquidity_to_token0_token1(liquidity_raw,
+                                                          current_tick['tickIdx'], next_tick['tickIdx'],
+                                                          token0_decimals, token1_decimals)
+            liquidity_sum += liquidity_adj
+
+            current_tick['liquidityRaw'] = liquidity_raw
+            current_tick['liquidityAdj'] = liquidity_adj
+            current_tick['liquiditySum'] = liquidity_sum
+            final_tick_list.append(current_tick)
+
+            current_tick = next_tick
+
+        tick_list = get_ticks(pool_address, tick_spacing,
+                              tick_lower_bound=current_tick['tickIdx'] + tick_spacing,
+                              tick_upper_bound=current_tick['tickIdx'] + tick_spacing * 201,
+                              date_lower_bound=today_timestamp, date_upper_bound=today_timestamp,
+                              token0_decimals=token0_decimals, token1_decimals=token1_decimals)
+
+    half_liquidity = final_tick_list[-1]['liquiditySum'] / 2
+
+    liquidity_ticks_df = pd.DataFrame(final_tick_list)
+    equal_liquidity_tick = liquidity_ticks_df.loc[liquidity_ticks_df.liquiditySum <= half_liquidity, 'tickIdx'].max()
+
+    # mark the bar with current active price
+    liquidity_ticks_df['equal_liquidity_price'] = False
+    liquidity_ticks_df.loc[liquidity_ticks_df.tickIdx == equal_liquidity_tick, 'equal_liquidity_price'] = True
+    return liquidity_ticks_df
+

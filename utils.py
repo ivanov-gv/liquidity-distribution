@@ -7,6 +7,12 @@ feetier_to_tickspacing_dict = {
     10000: 200
 }
 
+"""The minimum tick that can be used on any pool."""
+MIN_TICK: int = -887272
+
+"""The maximum tick that can be used on any pool."""
+MAX_TICK: int = -MIN_TICK
+
 
 def feetier_to_tickspacing(feetier: int) -> int:
     return feetier_to_tickspacing_dict[feetier]
@@ -32,7 +38,6 @@ def liquidity_to_token0_token1(liquidity: int,
                                lower_tick: int, upper_tick: int,
                                decimals0: int, decimals1: int) \
         -> (float, float):
-
     # Compute square roots of prices corresponding to the bottom and top ticks
     sqrt_price_a = tick_to_raw_price_token0(lower_tick // 2)  # price = 1.0001 ** tick i.e.
     sqrt_price_b = tick_to_raw_price_token0(upper_tick // 2)  # sqrt(price) = 1.0001 ** (tick // 2)
