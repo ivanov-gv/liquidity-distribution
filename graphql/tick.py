@@ -1,138 +1,110 @@
+from __future__ import annotations
 import datetime
-
 import requests
 
 from utils import raw_price_to_price_token0, liquidity_to_token0_token1
 
 
-def get_ticks(pool_address: str, tick_spacing: int,
-              tick_lower_bound: int, tick_upper_bound: int,
-              date_lower_bound: int, date_upper_bound: int,
-              token0_decimals: int, token1_decimals: int) -> list[dict]:
-    """
+class TickInfo:
+    __slots__ = (
+        'date',
+        'readable_date',
+        'liquidity_net',
+        'tick_idx'
+    )
 
-    :param pool_address:
-    :param tick_spacing:
-    :param tick_lower_bound:
-    :param tick_upper_bound:
-    :param date_lower_bound:
-    :param date_upper_bound:
-    :param token0_decimals:
-    :param token1_decimals:
-    :return: list of ticks with pool day data
-    """
+    def __init__(self, date: int, readable_date: str, liquidity_net: int, tick_idx: int):
+        self.date = date
+        self.readable_date = readable_date
+        self.liquidity_net = liquidity_net
+        self.tick_idx = tick_idx
 
-    query = ''' 
-        {{
-          tickDayDatas(
-            first: {first},
-            skip: {skip},
-            where: {{
-              pool: "{pool}",
-              date_lte: {date_lte}, 
-              date_gte: {date_gte},
-              tick_lte: "{pool}#{tick_lte}",
-              tick_gte: "{pool}#{tick_gte}"
-            }}) {{
-            date
-            tick{{
-              price0,
-              price1,
-              liquidityNet,
-              tickIdx
-            }}
-          }}
-        }} '''.format(first=200,
-                      skip=0,
-                      pool=pool_address,
-                      date_lte=date_upper_bound,
-                      date_gte=date_lower_bound,
-                      tick_lte=tick_upper_bound,
-                      tick_gte=tick_lower_bound)
+    @staticmethod
+    def get(pool_address: str,
+            tick_lower_bound: int, tick_upper_bound: int,
+            date_lower_bound: int, date_upper_bound: int,
+            first: int = 200) -> list[TickInfo]:
+        """
 
-    response = requests.post('https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3', json={'query': query})
+        :param pool_address:
+        :param tick_lower_bound:
+        :param tick_upper_bound:
+        :param date_lower_bound:
+        :param date_upper_bound:
+        :return: list of ticks with pool day data
+        """
 
-    if response.status_code != 200:
-        raise RuntimeError(f"Response statuscode is not ok: {response.status_code}")
+        query = ''' 
+            {{
+              tickDayDatas(
+                first: {first},
+                where: {{
+                  pool: "{pool}",
+                  date_lte: {date_lte}, 
+                  date_gte: {date_gte},
+                  tick_lte: "{pool}#{tick_lte}",
+                  tick_gte: "{pool}#{tick_gte}"
+                }}) {{
+                date
+                tick{{
+                  liquidityNet,
+                  tickIdx
+                }}
+              }}
+            }} '''.format(first=first,
+                          pool=pool_address,
+                          date_lte=date_upper_bound,
+                          date_gte=date_lower_bound,
+                          tick_lte=tick_upper_bound,
+                          tick_gte=tick_lower_bound)
 
-    tick_list = response.json()['data']['tickDayDatas']
+        response = requests.post('https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3', json={'query': query})
 
-    if not tick_list:
-        return []
+        if response.status_code != 200:
+            raise RuntimeError(f"Response statuscode is not ok: {response.status_code}")
 
-    liquidity = 0
-    for tick in tick_list:
-        tick['readable_date'] = str(datetime.date.fromtimestamp(tick['date']))
-        tick['liquidityNet'] = int(tick['tick']['liquidityNet'])
-        tick['tickIdx'] = int(tick['tick']['tickIdx'])
-        tick['price0'] = float(tick['tick']['price0'])
-        tick['price1'] = float(tick['tick']['price1'])
+        tick_list = response.json()['data']['tickDayDatas']
 
-        # Convert raw prices to actual ones
-        tick['price0'] = raw_price_to_price_token0(token0_decimals, token1_decimals, tick['price0'])
-        tick['price1'] = 1 / tick['price0']
+        return [TickInfo(date=tick['date'],
+                         readable_date=str(datetime.date.fromtimestamp(tick['date'])),
+                         liquidity_net=int(tick['tick']['liquidityNet']),
+                         tick_idx=int(tick['tick']['tickIdx']))
+                for tick in tick_list]
 
-        # Calculate adjusted liquidity in tick
-        liquidity += tick['liquidityNet']
-        tick['liquidity'], _ = liquidity_to_token0_token1(liquidity,
-                                                          tick['tickIdx'], tick['tickIdx'] + tick_spacing,
-                                                          token0_decimals, token1_decimals)
+    @staticmethod
+    def get_current(pool_address: str,
+                    tick_lower_bound: int, tick_upper_bound: int,
+                    first: int = 400) -> list[TickInfo]:
+        query = ''' 
+            {{
+              ticks(
+                first: {first},
+                where: {{
+                  pool: "{pool}",
+                  tickIdx_lte: "{tick_lte}",
+                  tickIdx_gte: "{tick_gte}"
+                }}) {{
+                  liquidityNet,
+                  tickIdx
+              }}
+            }} '''.format(first=first,
+                          pool=pool_address,
+                          tick_lte=tick_upper_bound,
+                          tick_gte=tick_lower_bound)
 
-        del tick['tick']
+        response = requests.post('https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3', json={'query': query})
 
-    return tick_list
+        if response.status_code != 200:
+            raise RuntimeError(f"Response statuscode is not ok: {response.status_code}")
 
+        tick_list = response.json()['data']['ticks']
 
-def get_current_ticks(pool_address: str, tick_spacing: int,
-                      tick_lower_bound: int, tick_upper_bound: int,
-                      token0_decimals: int, token1_decimals: int) -> list[dict]:
+        now = datetime.datetime.now()
+        date = int(now.timestamp())
+        readable_date = str(now)
 
-    query = ''' 
-        {{
-          ticks(
-            first: {first},
-            skip: {skip},
-            where: {{
-              pool: "{pool}",
-              tickIdx_lte: "{tick_lte}",
-              tickIdx_gte: "{tick_gte}"
-            }}) {{
-              price0,
-              price1,
-              liquidityNet,
-              tickIdx
-          }}
-        }} '''.format(first=400,
-                      skip=0,
-                      pool=pool_address,
-                      tick_lte=tick_upper_bound,
-                      tick_gte=tick_lower_bound)
-
-    response = requests.post('https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3', json={'query': query})
-
-    if response.status_code != 200:
-        raise RuntimeError(f"Response statuscode is not ok: {response.status_code}")
-
-    tick_list = response.json()['data']['ticks']
-
-    if not tick_list:
-        return []
-
-    liquidity = 0
-    for tick in tick_list:
-        tick['liquidityNet'] = int(tick['liquidityNet'])
-        tick['tickIdx'] = int(tick['tickIdx'])
-        tick['price0'] = float(tick['price0'])
-        tick['price1'] = float(tick['price1'])
-
-        # Convert raw prices to actual ones
-        tick['price0'] = raw_price_to_price_token0(token0_decimals, token1_decimals, tick['price0'])
-        tick['price1'] = 1 / tick['price0']
-
-        # Calculate adjusted liquidity in tick
-        liquidity += tick['liquidityNet']
-        tick['liquidity'], _ = liquidity_to_token0_token1(liquidity,
-                                                          tick['tickIdx'], tick['tickIdx'] + tick_spacing,
-                                                          token0_decimals, token1_decimals)
-
-    return tick_list
+        return [TickInfo(date=date,
+                         readable_date=readable_date,
+                         liquidity_net=int(tick['liquidityNet']),
+                         tick_idx=int(tick['tickIdx']))
+                for tick in tick_list]

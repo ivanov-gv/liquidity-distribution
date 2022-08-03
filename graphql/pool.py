@@ -22,7 +22,7 @@ class PoolInfo:
         self.token1_decimals: int = token1_decimals
 
     @staticmethod
-    def get_pool_info(pool_address: str) -> PoolInfo:
+    def get(pool_address: str) -> PoolInfo:
         """
         Get pool statistics from subgraph for uniswap v3
         :param pool_address: pool address in 0x format
@@ -70,8 +70,7 @@ class PoolDateInfo:
         self.date: int = date
 
     @staticmethod
-    def get_pool_day_data(pool_address: str, date_lower_bound: int, date_upper_bound: int,
-                          first: int = 100) -> list[PoolDateInfo]:
+    def get(pool_address: str, date_lower_bound: int, date_upper_bound: int, first: int = 100) -> list[PoolDateInfo]:
         """
 
         :param pool_address:
