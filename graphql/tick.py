@@ -22,8 +22,8 @@ class TickInfo:
             tick_lower_bound: int, tick_upper_bound: int,
             date_timestamp: int, first: int = 200) -> list[TickInfo]:
         """
-
-        :param first:
+        Get list of ticks with pool day data
+        :param first: get first n ticks from query
         :param pool_address:
         :param tick_lower_bound:
         :param tick_upper_bound:
@@ -70,6 +70,14 @@ class TickInfo:
     def get_current(pool_address: str,
                     tick_lower_bound: int, tick_upper_bound: int,
                     first: int = 400) -> list[TickInfo]:
+        """
+        Get list of ticks with pool day data for current moment
+        :param pool_address:
+        :param tick_lower_bound:
+        :param tick_upper_bound:
+        :param first: get first n ticks from query
+        :return: list of ticks with pool day data
+        """
         query = ''' 
             {{
               ticks(

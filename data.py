@@ -1,50 +1,45 @@
 from console_progressbar import ProgressBar
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import pandas as pd
-from math import isnan, log
+from math import log
 
 from utils import *
 from graphql.pool import PoolInfo, PoolDateInfo
 from graphql.tick import TickInfo
 
 
-def get_liquidity_distribution_current(pool: PoolInfo, num_surrounding_ticks: int) -> pd.DataFrame:
+def _get_liquidity_distribution(pool: PoolInfo, _date: Union[datetime, None],
+                                num_surrounding_ticks: int) -> pd.DataFrame:
+    """
+    Get dataframe containing all ticks in range
+    [active_tick - num_surrounding_ticks * pool.tick_spacing, active_tick + num_surrounding_ticks * pool.tick_spacing],
+
+    :param pool: info about pool
+    :param _date: datetime() for specific date or None for getting current moment data
+    :param num_surrounding_ticks: width of the range counted in initialized ticks
+    :return: pandas.DataFrame with columns:
+            'tickIdx': tick id, integer
+            'liquidityRaw': raw liquidity, integer,
+            'liquidityNet': liquidity net, integer
+            'liquidityAdj0': adjusted liquidity in token0,
+            'liquidityAdj1': adjusted liquidity in token1,
+            'price0': price in token0,
+            'price1': price in token1
     """
 
-    :param pool:
-    :param num_surrounding_ticks:
-    :return:
-    """
-
-    tick_lower_bound = pool.active_tick - num_surrounding_ticks * pool.tick_spacing
-    tick_upper_bound = pool.active_tick + num_surrounding_ticks * pool.tick_spacing
-    liquidity_list = TickInfo.get_current(pool.address, pool.tick_spacing, tick_lower_bound, tick_upper_bound)
-
-    liquidity_ticks_df = pd.DataFrame(liquidity_list)
-    nearest_using_tick = liquidity_ticks_df.loc[liquidity_ticks_df.tickIdx <= pool.active_tick, 'tickIdx'].max()
-    calculated_liquidity = liquidity_ticks_df.loc[liquidity_ticks_df.tickIdx == nearest_using_tick] \
-        .iloc[0]['liquidity']
-    liquidity_ticks_df['liquidity'] = liquidity_ticks_df['liquidity'] \
-        .map(lambda x: x - calculated_liquidity + pool.liquidity_token0_adj)
-
-    # mark the bar with current active price
-    liquidity_ticks_df['active_price'] = False
-    liquidity_ticks_df.loc[liquidity_ticks_df.tickIdx == nearest_using_tick, 'active_price'] = True
-
-    return liquidity_ticks_df
-
-
-def get_liquidity_distribution_on_date(pool: PoolInfo, date: datetime.date,
-                                       num_surrounding_ticks: int) -> pd.DataFrame:
-    date_timestamp = round_timestamp_to_day(date.timestamp())
-    active_tick_info = PoolDateInfo.get(pool, date_timestamp)
+    if _date:
+        date_timestamp = round_timestamp_to_day(_date.timestamp())
+        active_tick_info = PoolDateInfo.get(pool, date_timestamp)
+    else:
+        date_timestamp = int(datetime.now().timestamp())
+        active_tick_info = pool
 
     max_num_ticks = min(200, num_surrounding_ticks)
 
     price_token0 = tick_to_price_token0(active_tick_info.active_tick, pool.token0_decimals, pool.token1_decimals)
     price_token1 = 1 / price_token0
 
-    # asc
+    # create all ticks from active_tick to active_tick + num_surrounding_ticks * pool.tick_spacing in ascending order
     final_tick_list_asc = []
     tick_highest = active_tick_info.active_tick + num_surrounding_ticks * pool.tick_spacing
     current_tick = {'tickIdx': active_tick_info.active_tick,
@@ -58,11 +53,20 @@ def get_liquidity_distribution_on_date(pool: PoolInfo, date: datetime.date,
     while current_tick['tickIdx'] <= tick_highest:
         next_tick_upper_bound = min(tick_highest, current_tick['tickIdx'] + pool.tick_spacing * max_num_ticks)
 
-        tick_list = TickInfo.get(pool.address,
-                                 tick_lower_bound=current_tick['tickIdx'],
-                                 tick_upper_bound=next_tick_upper_bound,
-                                 date_timestamp=date_timestamp, first=max_num_ticks)
+        # get ticks with liquidity info
+        if _date:
+            tick_list = TickInfo.get(pool.address,
+                                     tick_lower_bound=current_tick['tickIdx'],
+                                     tick_upper_bound=next_tick_upper_bound,
+                                     date_timestamp=date_timestamp,
+                                     first=max_num_ticks)
+        else:
+            tick_list = TickInfo.get_current(pool.address,
+                                             tick_lower_bound=current_tick['tickIdx'],
+                                             tick_upper_bound=next_tick_upper_bound,
+                                             first=max_num_ticks)
 
+        # create all ticks and fill with liquidity info
         for tick_idx in range(current_tick['tickIdx'], next_tick_upper_bound + 1, pool.tick_spacing):
             if tick_list and tick_list[0].tick_idx == tick_idx:
                 current_tick['liquidityNet'] = tick_list[0].liquidity_net
@@ -91,7 +95,8 @@ def get_liquidity_distribution_on_date(pool: PoolInfo, date: datetime.date,
                             'price0': price_token0,
                             'price1': price_token1}
 
-    # desc
+    # create all ticks from active_tick - pool.tick_spacing to
+    #   active_tick - num_surrounding_ticks * pool.tick_spacing in descending order
     final_tick_list_desc = []
     tick_lowest = active_tick_info.active_tick - num_surrounding_ticks * pool.tick_spacing
     current_tick = {'tickIdx': active_tick_info.active_tick - pool.tick_spacing,
@@ -105,11 +110,17 @@ def get_liquidity_distribution_on_date(pool: PoolInfo, date: datetime.date,
     while current_tick['tickIdx'] > tick_lowest:
         next_tick_lower_bound = max(tick_lowest, current_tick['tickIdx'] - max_num_ticks * pool.tick_spacing)
 
-        tick_list = TickInfo.get(pool.address,
-                                 tick_lower_bound=next_tick_lower_bound,
-                                 tick_upper_bound=current_tick['tickIdx'],
-                                 date_timestamp=date_timestamp)
-
+        # get ticks with liquidity info
+        if _date:
+            tick_list = TickInfo.get(pool.address,
+                                     tick_lower_bound=next_tick_lower_bound,
+                                     tick_upper_bound=current_tick['tickIdx'],
+                                     date_timestamp=date_timestamp)
+        else:
+            tick_list = TickInfo.get_current(pool.address,
+                                             tick_lower_bound=next_tick_lower_bound,
+                                             tick_upper_bound=current_tick['tickIdx'])
+        # turn to ascending order
         tick_list.reverse()
 
         for tick_idx in range(current_tick['tickIdx'], next_tick_lower_bound - pool.tick_spacing, -pool.tick_spacing):
@@ -148,7 +159,13 @@ def get_liquidity_distribution_on_date(pool: PoolInfo, date: datetime.date,
     return liquidity_ticks_df
 
 
-def mark_half_liquidity_price(liquidity_ticks_df: pd.DataFrame, use_token1: bool = False) -> None:
+def mark_half_liquidity_price(liquidity_ticks_df: pd.DataFrame, use_token1: bool) -> None:
+    """
+    Mark price at which sum liquidity on the left side is equal to sum liquidity on the right side
+    :param liquidity_ticks_df: dataframe from _get_liquidity_distribution()
+    :param use_token1: indicate which token to use for calculation
+    :return: liquidity_ticks_df with changed 'label' column
+    """
     if use_token1:
         liquidity_label = 'liquidityAdj1'
     else:
@@ -158,8 +175,6 @@ def mark_half_liquidity_price(liquidity_ticks_df: pd.DataFrame, use_token1: bool
     liquidity_sum = liquidity_adj_cum_sum.iloc[-1]
     half_liquidity = liquidity_adj_cum_sum.loc[liquidity_adj_cum_sum <= liquidity_sum / 2].max()
 
-    if isnan(half_liquidity):
-        return
     half_liquidity_index = liquidity_adj_cum_sum[liquidity_adj_cum_sum == half_liquidity].index[0]
     liquidity_ticks_df.loc[liquidity_ticks_df.index == half_liquidity_index, 'label'] = 'half liquidity'
 
@@ -167,25 +182,56 @@ def mark_half_liquidity_price(liquidity_ticks_df: pd.DataFrame, use_token1: bool
 def get_liquidity_distribution(pool: PoolInfo,
                                from_date: datetime, to_date: datetime, step: timedelta,
                                price_bounds_multiplier: float = 2.0,
-                               progress_bar: bool = True) -> pd.DataFrame:
-
+                               progress_bar: bool = True,
+                               base_token1: bool = True) -> pd.DataFrame:
+    """
+    Get liquidity distribution for specific time range
+    :param pool: pool to get the info from
+    :param from_date: left bound of the time range
+    :param to_date: right bound of the time range
+    :param step:
+    :param price_bounds_multiplier: price at the left border of graph will be price_bounds_multiplier times less
+            than active price and also price at the right border will be price_bounds_multiplier times more than
+            active price
+    :param progress_bar: draw progressbar or not
+    :param base_token1: True if you want to use token1 as a base token, False otherwise
+    :return: pandas.DataFrame
+    """
     total = to_date.timestamp() - from_date.timestamp()
     pb = ProgressBar(total, prefix='loading liquidity data', length=50)
 
     num_surrounding_ticks = int(log(price_bounds_multiplier, 1.0001)) // pool.tick_spacing
 
-    date = from_date
+    _date = from_date
     liquidity_data = pd.DataFrame()
 
-    while date <= to_date:
+    while _date <= to_date:
         if progress_bar:
-            pb.print_progress_bar(date.timestamp() - from_date.timestamp())
-        data = get_liquidity_distribution_on_date(pool, date, num_surrounding_ticks)
-        mark_half_liquidity_price(data)
+            pb.print_progress_bar(_date.timestamp() - from_date.timestamp())
+        data = _get_liquidity_distribution(pool, _date, num_surrounding_ticks)
+        mark_half_liquidity_price(data, use_token1=base_token1)
         liquidity_data = pd.concat((liquidity_data, data))
-        date = date + step
+        _date = _date + step
 
     if progress_bar:
         pb.print_progress_bar(total)
 
     return liquidity_data
+
+
+def get_current_liquidity_distribution(pool: PoolInfo,
+                                       price_bounds_multiplier: float = 2.0,
+                                       base_token1: bool = True) -> pd.DataFrame:
+    """
+    Get liquidity distribution for current moment
+    :param pool: pool to get the info from
+    :param price_bounds_multiplier: price at the left border of graph will be price_bounds_multiplier times less
+            than active price and also price at the right border will be price_bounds_multiplier times more than
+            active price
+    :param base_token1: True if you want to use token1 as a base token, False otherwise
+    :return: pandas.DataFrame
+    """
+    num_surrounding_ticks = int(log(price_bounds_multiplier, 1.0001)) // pool.tick_spacing
+    data = _get_liquidity_distribution(pool, None, num_surrounding_ticks)
+    mark_half_liquidity_price(data, use_token1=base_token1)
+    return data

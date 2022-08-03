@@ -14,12 +14,15 @@ class PoolInfo:
         'liquidity',
         'token0_decimals',
         'token1_decimals',
-        'liquidity_token0_adj',
-        'liquidity_token1_adj'
+        'liquidity_token0',
+        'liquidity_token1',
+        'price_token1',
+        'price_token0'
     )
 
-    def __init__(self, address: str, tick: int, fee_tier: int, liquidity: int, token0_decimals: int,
-                 token1_decimals: int):
+    def __init__(self, address: str, tick: int, fee_tier: int, liquidity: int,
+                 token0_decimals: int, token1_decimals: int,
+                 price_token1: float, price_token0: float):
         self.address = address
         self.current_tick: int = tick
         self.tick_spacing: int = feetier_to_tickspacing(fee_tier)
@@ -32,15 +35,17 @@ class PoolInfo:
                                                                             self.active_tick,
                                                                             self.active_tick + self.tick_spacing,
                                                                             token0_decimals, token1_decimals)
-        self.liquidity_token0_adj = liquidity_token0,
-        self.liquidity_token1_adj = liquidity_token1
+        self.liquidity_token0: float = liquidity_token0
+        self.liquidity_token1: float = liquidity_token1
+        self.price_token0: float = price_token0
+        self.price_token1: float = price_token1
 
     @staticmethod
     def get(pool_address: str) -> PoolInfo:
         """
         Get pool statistics from subgraph for uniswap v3
         :param pool_address: pool address in 0x format
-        :return: pool statistics
+        :return: PoolInfo
         """
         query = ''' 
         {{ pool(id: "{pool_address}") {{
@@ -53,6 +58,8 @@ class PoolInfo:
               }}
               feeTier
               liquidity
+              token0Price
+              token1Price
         }}}}'''.format(pool_address=pool_address)
 
         response = requests.post('https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3', json={'query': query})
@@ -67,7 +74,9 @@ class PoolInfo:
                         fee_tier=int(pool_data['feeTier']),
                         liquidity=int(pool_data['liquidity']),
                         token0_decimals=int(pool_data['token0']['decimals']),
-                        token1_decimals=int(pool_data['token1']['decimals']))
+                        token1_decimals=int(pool_data['token1']['decimals']),
+                        price_token1=float(pool_data['token1Price']),
+                        price_token0=float(pool_data['token0Price']))
 
 
 class PoolDateInfo:
@@ -98,10 +107,10 @@ class PoolDateInfo:
     @staticmethod
     def get(pool: PoolInfo, date: int) -> PoolDateInfo:
         """
-
-        :param pool:
+        Get pool statistics from subgraph for uniswap v3
+        :param pool: pool_address: pool address in 0x format
         :param date:
-        :return:
+        :return: PoolDateInfo
         """
 
         query = ''' 
