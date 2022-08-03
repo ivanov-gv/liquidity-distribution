@@ -35,10 +35,9 @@ def get_active_tick(current_tick: int, tick_spacing: int) -> int:
     return floor(current_tick // tick_spacing) * tick_spacing
 
 
-def liquidity_to_token0_token1(liquidity: int,
-                               lower_tick: int, upper_tick: int,
-                               decimals0: int, decimals1: int) \
-        -> (float, float):
+def liquidity_to_token0_token1_adj(liquidity: int,
+                                   lower_tick: int, upper_tick: int,
+                                   decimals0: int, decimals1: int) -> (float, float):
     # Compute square roots of prices corresponding to the bottom and top ticks
     sqrt_price_a = tick_to_raw_price_token0(lower_tick // 2)  # price = 1.0001 ** tick i.e.
     sqrt_price_b = tick_to_raw_price_token0(upper_tick // 2)  # sqrt(price) = 1.0001 ** (tick // 2)

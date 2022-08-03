@@ -1,25 +1,39 @@
 from __future__ import annotations
 import requests
 
+from utils import feetier_to_tickspacing, get_active_tick, liquidity_to_token0_token1_adj
+
 
 class PoolInfo:
     __slots__ = (
-        'tick',
+        'address',
+        'current_tick',
+        'active_tick',
         'fee_tier',
-        'sqrt_price',
+        'tick_spacing',
         'liquidity',
         'token0_decimals',
-        'token1_decimals'
+        'token1_decimals',
+        'liquidity_token0_adj',
+        'liquidity_token1_adj'
     )
 
-    def __init__(self, tick: int, fee_tier: int, sqrt_price: int, liquidity: int, token0_decimals: int,
+    def __init__(self, address: str, tick: int, fee_tier: int, liquidity: int, token0_decimals: int,
                  token1_decimals: int):
-        self.tick: int = tick
+        self.address = address
+        self.current_tick: int = tick
+        self.tick_spacing: int = feetier_to_tickspacing(fee_tier)
         self.fee_tier: int = fee_tier
-        self.sqrt_price: int = sqrt_price
+        self.active_tick: int = get_active_tick(tick, self.tick_spacing)
         self.liquidity: int = liquidity
         self.token0_decimals: int = token0_decimals
         self.token1_decimals: int = token1_decimals
+        liquidity_token0, liquidity_token1 = liquidity_to_token0_token1_adj(liquidity,
+                                                                            self.active_tick,
+                                                                            self.active_tick + self.tick_spacing,
+                                                                            token0_decimals, token1_decimals)
+        self.liquidity_token0_adj = liquidity_token0,
+        self.liquidity_token1_adj = liquidity_token1
 
     @staticmethod
     def get(pool_address: str) -> PoolInfo:
@@ -38,7 +52,6 @@ class PoolInfo:
                 decimals
               }}
               feeTier
-              sqrtPrice
               liquidity
         }}}}'''.format(pool_address=pool_address)
 
@@ -49,9 +62,9 @@ class PoolInfo:
 
         pool_data = response.json()['data']['pool']
 
-        return PoolInfo(tick=int(pool_data['tick']),
+        return PoolInfo(address=pool_address,
+                        tick=int(pool_data['tick']),
                         fee_tier=int(pool_data['feeTier']),
-                        sqrt_price=int(pool_data['sqrtPrice']),
                         liquidity=int(pool_data['liquidity']),
                         token0_decimals=int(pool_data['token0']['decimals']),
                         token1_decimals=int(pool_data['token1']['decimals']))
@@ -59,53 +72,70 @@ class PoolInfo:
 
 class PoolDateInfo:
     __slots__ = (
-        'tick',
+        'current_tick',
+        'active_tick',
         'liquidity',
+        'liquidity_token0',
+        'liquidity_token1',
+        'price_token0',
+        'price_token1',
         'date'
     )
 
-    def __init__(self, tick: int, liquidity: int, date: int):
-        self.tick: int = tick
+    def __init__(self, tick: int, active_tick: int, liquidity: int,
+                 liquidity_token0: float, liquidity_token1: float,
+                 price_token0: float, price_token1: float,
+                 date: int):
+        self.current_tick: int = tick
+        self.active_tick: int = active_tick
         self.liquidity: int = liquidity
+        self.liquidity_token0: float = liquidity_token0
+        self.liquidity_token1: float = liquidity_token1
+        self.price_token0: float = price_token0
+        self.price_token1: float = price_token1
         self.date: int = date
 
     @staticmethod
-    def get(pool_address: str, date_lower_bound: int, date_upper_bound: int, first: int = 100) -> list[PoolDateInfo]:
+    def get(pool: PoolInfo, date: int) -> PoolDateInfo:
         """
 
-        :param pool_address:
-        :param date_lower_bound:
-        :param date_upper_bound:
+        :param pool:
+        :param date:
         :return:
         """
 
         query = ''' 
-          {{
-            poolDayDatas(
-              first: {first},
-              where: {{
-                pool: "{pool_address}",
-                date_lte: {date_lte}, 
-                date_gte: {date_gte},
-              }}) 
+        {{
+            poolDayData(
+              id: "{pool_address}-{date}") 
             {{
               date
               tick
               liquidity
+              token0Price,
+              token1Price
             }}
-          }}'''.format(pool_address=pool_address,
-                       date_lte=date_upper_bound,
-                       date_gte=date_lower_bound,
-                       first=first)
+        }}'''.format(pool_address=pool.address,
+                     date=date // 86400)
 
         response = requests.post('https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3', json={'query': query})
 
         if response.status_code != 200:
             raise RuntimeError(f"Response statuscode is not ok: {response.status_code}")
 
-        pool_data_list = response.json()['data']['poolDayDatas']
+        data = response.json()['data']['poolDayData']
 
-        return [PoolDateInfo(tick=int(data['tick']),
-                             liquidity=int(data['liquidity']),
-                             date=data['date']
-                             ) for data in pool_data_list]
+        tick = int(data['tick'])
+        active_tick = get_active_tick(tick, pool.tick_spacing)
+        liquidity = int(data['liquidity'])
+        liquidity_token0, liquidity_token1 = liquidity_to_token0_token1_adj(liquidity, active_tick,
+                                                                            active_tick + pool.tick_spacing,
+                                                                            pool.token0_decimals, pool.token1_decimals)
+        return PoolDateInfo(tick=tick,
+                            active_tick=active_tick,
+                            liquidity=liquidity,
+                            liquidity_token0=liquidity_token0,
+                            liquidity_token1=liquidity_token1,
+                            price_token0=float(data['token0Price']),
+                            price_token1=float(data['token1Price']),
+                            date=data['date'])

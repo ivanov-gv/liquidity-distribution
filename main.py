@@ -1,8 +1,8 @@
 import plotly.express as px
+from data import get_liquidity_distribution
 from datetime import datetime, timedelta
-from console_progressbar import ProgressBar
 
-from data import *
+from graphql.pool import PoolInfo
 
 if __name__ == "__main__":
     #   Get pool info
@@ -11,16 +11,8 @@ if __name__ == "__main__":
     to_date = datetime(year=2022, month=1, day=1)
     step = timedelta(days=7)
 
-    pb = ProgressBar(total=to_date.timestamp() - from_date.timestamp(), prefix='loading liquidity data', length=50)
-
-    date = from_date
-    liquidity_data = pd.DataFrame()
-    while date <= to_date:
-        pb.print_progress_bar(date.timestamp() - from_date.timestamp())
-        data = get_liquidity_distribution_full_2(pool_address, date)
-        mark_half_liquidity_price(data)
-        liquidity_data = pd.concat((liquidity_data, data))
-        date = date + step
+    pool = PoolInfo.get(pool_address)
+    liquidity_data = get_liquidity_distribution(pool, from_date, to_date, step, progress_bar=True)
 
     # plotting
     fig = px.bar(liquidity_data, x="price0", y="liquidityAdj0", animation_frame="readable_date",

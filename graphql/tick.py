@@ -2,8 +2,6 @@ from __future__ import annotations
 import datetime
 import requests
 
-from utils import raw_price_to_price_token0, liquidity_to_token0_token1
-
 
 class TickInfo:
     __slots__ = (
@@ -22,15 +20,14 @@ class TickInfo:
     @staticmethod
     def get(pool_address: str,
             tick_lower_bound: int, tick_upper_bound: int,
-            date_lower_bound: int, date_upper_bound: int,
-            first: int = 200) -> list[TickInfo]:
+            date_timestamp: int, first: int = 200) -> list[TickInfo]:
         """
 
+        :param first:
         :param pool_address:
         :param tick_lower_bound:
         :param tick_upper_bound:
-        :param date_lower_bound:
-        :param date_upper_bound:
+        :param date_timestamp:
         :return: list of ticks with pool day data
         """
 
@@ -40,8 +37,7 @@ class TickInfo:
                 first: {first},
                 where: {{
                   pool: "{pool}",
-                  date_lte: {date_lte}, 
-                  date_gte: {date_gte},
+                  date: {date},
                   tick_lte: "{pool}#{tick_lte}",
                   tick_gte: "{pool}#{tick_gte}"
                 }}) {{
@@ -53,8 +49,7 @@ class TickInfo:
               }}
             }} '''.format(first=first,
                           pool=pool_address,
-                          date_lte=date_upper_bound,
-                          date_gte=date_lower_bound,
+                          date=date_timestamp,
                           tick_lte=tick_upper_bound,
                           tick_gte=tick_lower_bound)
 
