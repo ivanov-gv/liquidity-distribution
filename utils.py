@@ -19,6 +19,10 @@ def feetier_to_tickspacing(feetier: int) -> int:
     return feetier_to_tickspacing_dict[feetier]
 
 
+def feetier_to_fee_percent(feetier: int) -> float:
+    return float(feetier) / 10000.0
+
+
 def tick_to_raw_price_token0(tick: int) -> float:
     return 1.0001 ** tick
 

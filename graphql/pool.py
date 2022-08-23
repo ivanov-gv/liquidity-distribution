@@ -17,12 +17,14 @@ class PoolInfo:
         'liquidity_token0',
         'liquidity_token1',
         'price_token1',
-        'price_token0'
+        'price_token0',
+        'pair_name',
     )
 
     def __init__(self, address: str, tick: int, fee_tier: int, liquidity: int,
                  token0_decimals: int, token1_decimals: int,
-                 price_token1: float, price_token0: float):
+                 price_token1: float, price_token0: float,
+                 symbol0: str, symbol1: str):
         self.address = address
         self.current_tick: int = tick
         self.tick_spacing: int = feetier_to_tickspacing(fee_tier)
@@ -39,6 +41,7 @@ class PoolInfo:
         self.liquidity_token1: float = liquidity_token1
         self.price_token0: float = price_token0
         self.price_token1: float = price_token1
+        self.pair_name: str = f'{symbol0}/{symbol1}'
 
     @staticmethod
     def get(pool_address: str) -> PoolInfo:
@@ -52,9 +55,11 @@ class PoolInfo:
               tick
               token0 {{
                 decimals
+                symbol
               }}
               token1 {{
                 decimals
+                symbol
               }}
               feeTier
               liquidity
@@ -76,7 +81,9 @@ class PoolInfo:
                         token0_decimals=int(pool_data['token0']['decimals']),
                         token1_decimals=int(pool_data['token1']['decimals']),
                         price_token1=float(pool_data['token1Price']),
-                        price_token0=float(pool_data['token0Price']))
+                        price_token0=float(pool_data['token0Price']),
+                        symbol0=pool_data['token0']['symbol'],
+                        symbol1=pool_data['token1']['symbol'])
 
 
 class PoolDateInfo:
