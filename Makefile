@@ -1,10 +1,8 @@
-APP_NAME=app
-
 clean:
-	rm -f build/${APP_NAME}
+	rm -f build/*
 
 build: clean
-	go build -o build/${APP_NAME} ./cmd
+	go build -o build/ ./...
 
 run: build
-	PORT=${PORT} ./${APP_NAME}
+	./build/cmd

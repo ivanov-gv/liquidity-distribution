@@ -1,26 +1,22 @@
 package main
 
 import (
-	"context"
 	"fmt"
+	"github.com/ivanov-gv/liquidity-distribution/pkg/subgraph"
 	"github.com/shurcooL/graphql"
+	"time"
 )
-
-type PoolInfo struct {
-	Pool struct {
-		Tick graphql.String
-	} `graphql:"pool(id: $id)"`
-}
 
 func main() {
 	client := graphql.NewClient("https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3", nil)
-	var query PoolInfo
-	variables := map[string]any{
-		"id": "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8",
-	}
-	err := client.Query(context.Background(), &query, variables)
+	pool, err := subgraph.NewPool(client, "0x8ad599c3a0ff1de082011efddc58f1908eb6e6d8")
 	if err != nil {
-		fmt.Printf("there is an error: %s\n", err)
+		fmt.Println(err)
 	}
-	fmt.Println(query.Pool.Tick)
+	fmt.Println(pool)
+	poolDayData, err := subgraph.NewPoolDay(client, pool, time.Date(2022, 1, 1, 0, 0, 0, 0, time.Local))
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(poolDayData)
 }
