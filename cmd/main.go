@@ -19,4 +19,10 @@ func main() {
 		fmt.Println(err)
 	}
 	fmt.Println(poolDayData)
+
+	ticks, err := subgraph.GetTicksForNow(client, pool, 10000000, -100000000)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(ticks)
 }

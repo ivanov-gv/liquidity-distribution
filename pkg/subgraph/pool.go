@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-const secondsInDay = 86400
-
 type tokenDto struct {
 	Decimals string
 	Symbol   string
