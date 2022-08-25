@@ -20,7 +20,7 @@ func main() {
 	}
 	fmt.Println(poolDayData)
 
-	ticks, err := subgraph.GetTicksForNow(client, pool, 10000000, -100000000)
+	ticks, err := subgraph.GetTicksForNow(client, pool, 10000000, -100000000, subgraph.Ascending)
 	if err != nil {
 		fmt.Println(err)
 	}

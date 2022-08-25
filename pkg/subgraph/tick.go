@@ -14,7 +14,7 @@ type tickDayDto struct {
 		Tick struct {
 			LiquidityNet string `graphql:"liquidityNet"`
 			TickIdx      string `graphql:"tickIdx"`
-		} `graphql:"tickDayDatas(first: $first, where: {pool: $pool, date: $date, tick_lte: $tick_lte, tick_gte: $tick_gte})"`
+		} `graphql:"tickDayDatas(first: $first, orderBy: $order_by, orderDirection: $order_dir, where: {pool: $pool, date: $date, tick_lte: $tick_lte, tick_gte: $tick_gte})"`
 	}
 }
 
@@ -39,7 +39,7 @@ type tickDto struct {
 	TickData []struct {
 		TickIdx      string
 		LiquidityNet string
-	} `graphql:"ticks(first: $first, where: {pool: $pool, tickIdx_lte: $tick_lte, tickIdx_gte: $tick_gte})"`
+	} `graphql:"ticks(first: $first, orderBy: $order_by, orderDirection: $order_dir, where: {pool: $pool, tickIdx_lte: $tick_lte, tickIdx_gte: $tick_gte})"`
 }
 
 func (dto *tickDto) fromDto() (*[]Tick, error) {
@@ -69,20 +69,56 @@ type Tick struct {
 	LiquidityNet *big.Int
 }
 
-func GetTicksForNow(client *graphql.Client, pool *Pool, tickLte int, tickGte int) (*[]Tick, error) {
-	var query tickDto
-	err := client.Query(context.Background(), &query,
-		map[string]any{
-			"first":    graphql.Int(1000),
-			"pool":     pool.Address,
-			"tick_lte": graphql.Int(tickLte),
-			"tick_gte": graphql.Int(tickGte),
-		})
-	if err != nil {
-		return nil, err
+type OrderDirection string
+
+const (
+	Ascending  OrderDirection = "asc"
+	Descending OrderDirection = "desc"
+)
+
+const limit = 1000
+
+func GetTicksForNow(client *graphql.Client, pool *Pool, tickLte int, tickGte int, direction OrderDirection) (*[]Tick, error) {
+	var (
+		result    tickDto
+		lowerTick = tickGte
+		upperTick = tickLte
+	)
+
+FetchData:
+	for {
+		var query tickDto
+		err := client.Query(context.Background(), &query,
+			map[string]any{
+				"first":     graphql.Int(limit),
+				"pool":      pool.Address,
+				"tick_lte":  graphql.Int(upperTick),
+				"tick_gte":  graphql.Int(lowerTick),
+				"order_by":  "tickIdx",
+				"order_dir": direction,
+			})
+		if err != nil {
+			return nil, err
+		}
+
+		result.TickData = append(result.TickData, query.TickData...)
+		if len(query.TickData) < limit {
+			break FetchData
+		}
+
+		lastIndex := len(query.TickData) - 1
+		lastElem, err := strconv.Atoi(query.TickData[lastIndex].TickIdx)
+		if err != nil {
+			return nil, err
+		}
+
+		switch direction {
+		case Ascending:
+			lowerTick = lastElem + 1
+		case Descending:
+			upperTick = lastElem - 1
+		}
 	}
-	// todo: repeat if reached limit
-	// todo: add  orderBy: tickIdx,
-	//            orderDirection: asc
-	return query.fromDto()
+
+	return result.fromDto()
 }
