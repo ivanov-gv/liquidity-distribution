@@ -3,7 +3,6 @@ package subgraph
 import (
 	"context"
 	"fmt"
-	"github.com/shurcooL/graphql"
 	"math/big"
 	"strconv"
 	"time"
@@ -107,7 +106,7 @@ type Pool struct {
 	Token1Price float32
 }
 
-func NewPool(client *graphql.Client, address string) (*Pool, error) {
+func NewPool(client Client, address string) (*Pool, error) {
 	var query poolDto
 	err := client.Query(context.Background(), &query,
 		map[string]any{
@@ -172,7 +171,7 @@ type PoolDay struct {
 	Token1Price float32
 }
 
-func NewPoolDay(client *graphql.Client, pool *Pool, date time.Time) (*PoolDay, error) {
+func NewPoolDay(client Client, pool *Pool, date time.Time) (*PoolDay, error) {
 	var query poolDayDto
 	timestamp := date.Unix() / secondsInDay
 	err := client.Query(context.Background(), &query,

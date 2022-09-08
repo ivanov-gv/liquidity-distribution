@@ -1,124 +1,167 @@
 package subgraph
 
 import (
-	"context"
 	"fmt"
 	"github.com/shurcooL/graphql"
 	"math/big"
 	"strconv"
+	"time"
 )
-
-type tickDayDto struct {
-	TickDayData struct {
-		Date int64 `graphql:"date"`
-		Tick struct {
-			LiquidityNet string `graphql:"liquidityNet"`
-			TickIdx      string `graphql:"tickIdx"`
-		} `graphql:"tickDayDatas(first: $first, orderBy: $order_by, orderDirection: $order_dir, where: {pool: $pool, date: $date, tick_lte: $tick_lte, tick_gte: $tick_gte})"`
-	}
-}
-
-func (dto *tickDayDto) fromDto() (*Tick, error) {
-	liquidityNet, success := new(big.Int).SetString(dto.TickDayData.Tick.LiquidityNet, 10)
-	if !success {
-		return nil, fmt.Errorf("got error while converting liquidityNet to big.Int")
-	}
-
-	tick, err := strconv.Atoi(dto.TickDayData.Tick.TickIdx)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Tick{
-		TickIdx:      tick,
-		LiquidityNet: liquidityNet,
-	}, nil
-}
-
-type tickDto struct {
-	TickData []struct {
-		TickIdx      string
-		LiquidityNet string
-	} `graphql:"ticks(first: $first, orderBy: $order_by, orderDirection: $order_dir, where: {pool: $pool, tickIdx_lte: $tick_lte, tickIdx_gte: $tick_gte})"`
-}
-
-func (dto *tickDto) fromDto() (*[]Tick, error) {
-	var tickSlice = make([]Tick, len(dto.TickData))
-	for i, tick := range dto.TickData {
-		liquidityNet, success := new(big.Int).SetString(tick.LiquidityNet, 10)
-		if !success {
-			return nil, fmt.Errorf("got error while converting liquidityNet to big.Int")
-		}
-
-		tickIdx, err := strconv.Atoi(tick.TickIdx)
-		if err != nil {
-			return nil, err
-		}
-
-		tickSlice[i] = Tick{
-			TickIdx:      tickIdx,
-			LiquidityNet: liquidityNet,
-		}
-	}
-
-	return &tickSlice, nil
-}
 
 type Tick struct {
 	TickIdx      int
 	LiquidityNet *big.Int
 }
 
-type OrderDirection string
+type tickDto struct {
+	LiquidityNet string `graphql:"liquidityNet"`
+	TickIdx      string `graphql:"tickIdx"`
+}
 
-const (
-	Ascending  OrderDirection = "asc"
-	Descending OrderDirection = "desc"
-)
-
-const limit = 1000
-
-func GetTicksForNow(client *graphql.Client, pool *Pool, tickLte int, tickGte int, direction OrderDirection) (*[]Tick, error) {
-	var (
-		result    tickDto
-		lowerTick = tickGte
-		upperTick = tickLte
-	)
-
-FetchData:
-	for {
-		var query tickDto
-		err := client.Query(context.Background(), &query,
-			map[string]any{
-				"first":     graphql.Int(limit),
-				"pool":      pool.Address,
-				"tick_lte":  graphql.Int(upperTick),
-				"tick_gte":  graphql.Int(lowerTick),
-				"order_by":  "tickIdx",
-				"order_dir": direction,
-			})
-		if err != nil {
-			return nil, err
-		}
-
-		result.TickData = append(result.TickData, query.TickData...)
-		if len(query.TickData) < limit {
-			break FetchData
-		}
-
-		lastIndex := len(query.TickData) - 1
-		lastElem, err := strconv.Atoi(query.TickData[lastIndex].TickIdx)
-		if err != nil {
-			return nil, err
-		}
-
-		switch direction {
-		case Ascending:
-			lowerTick = lastElem + 1
-		case Descending:
-			upperTick = lastElem - 1
-		}
+func (dto tickDto) fromDto() (Tick, error) {
+	liquidityNet, success := new(big.Int).SetString(dto.LiquidityNet, 10)
+	if !success {
+		return Tick{}, fmt.Errorf("got error while converting liquidityNet to big.Int")
 	}
 
-	return result.fromDto()
+	tickIdx, err := strconv.Atoi(dto.TickIdx)
+	if err != nil {
+		return Tick{}, err
+	}
+
+	return Tick{
+		TickIdx:      tickIdx,
+		LiquidityNet: liquidityNet,
+	}, nil
+}
+
+type tickCurrentDto struct {
+	Ticks []tickDto `graphql:"ticks(first: $first, orderBy: $order_by, orderDirection: $order_dir, where: {pool: $pool, tickIdx_lte: $tick_lte, tickIdx_gte: $tick_gte})"`
+}
+
+func (dto *tickCurrentDto) fromDto() ([]Tick, error) {
+	ticks := make([]Tick, len(dto.Ticks))
+	for i, _tickDto := range dto.Ticks {
+		tick, err := _tickDto.fromDto()
+		if err != nil {
+			return nil, err
+		}
+
+		ticks[i] = tick
+	}
+	return ticks, nil
+}
+
+func (dto *tickCurrentDto) Next(param *map[string]any) error {
+	lastTick, err := strconv.Atoi(dto.Ticks[len(dto.Ticks)-1].TickIdx)
+	if err != nil {
+		return err
+	}
+
+	direction := (*param)["order_dir"]
+	switch direction {
+	case Ascending:
+		(*param)["tick_gte"] = graphql.Int(lastTick + 1)
+	case Descending:
+		(*param)["tick_lte"] = graphql.Int(lastTick - 1)
+	}
+	return nil
+}
+
+func (dto *tickCurrentDto) Enough() bool {
+	if len(dto.Ticks) < limit {
+		return true
+	}
+	return false
+}
+
+func (dto *tickCurrentDto) Append(elem ...Paginated) {
+	for _, i := range elem {
+		dto.Ticks = append(dto.Ticks, i.(*tickCurrentDto).Ticks...)
+	}
+}
+
+func GetTicks(client Client, pool *Pool, lowerTick int, upperTick int, direction OrderDirection) ([]Tick, error) {
+	var dto tickCurrentDto
+	err := client.QueryPaginated(&dto, func() Paginated {
+		return &tickCurrentDto{}
+	},
+		map[string]any{
+			"first":     graphql.Int(limit),
+			"pool":      pool.Address,
+			"tick_lte":  graphql.Int(upperTick),
+			"tick_gte":  graphql.Int(lowerTick),
+			"order_by":  "tickIdx",
+			"order_dir": direction,
+		})
+	if err != nil {
+		return nil, err
+	}
+	return dto.fromDto()
+}
+
+type tickDayDto struct {
+	Ticks []tickDto `graphql:"tickDayDatas(first: $first, orderBy: $order_by, orderDirection: $order_dir, where: {pool: $pool, date: $date, tick_lte: $tick_lte, tick_gte: $tick_gte})"`
+}
+
+func (dto *tickDayDto) fromDto() ([]Tick, error) {
+	ticks := make([]Tick, len(dto.Ticks))
+	for i, _tickDto := range dto.Ticks {
+		tick, err := _tickDto.fromDto()
+		if err != nil {
+			return nil, err
+		}
+
+		ticks[i] = tick
+	}
+	return ticks, nil
+}
+
+func (dto *tickDayDto) Next(param *map[string]any) error {
+	lastTick, err := strconv.Atoi(dto.Ticks[len(dto.Ticks)-1].TickIdx)
+	if err != nil {
+		return err
+	}
+
+	direction := (*param)["order_dir"]
+	switch direction {
+	case Ascending:
+		(*param)["tick_gte"] = graphql.Int(lastTick + 1)
+	case Descending:
+		(*param)["tick_lte"] = graphql.Int(lastTick - 1)
+	}
+	return nil
+}
+
+func (dto *tickDayDto) Enough() bool {
+	if len(dto.Ticks) < limit {
+		return true
+	}
+	return false
+}
+
+func (dto *tickDayDto) Append(elem ...Paginated) {
+	for _, i := range elem {
+		dto.Ticks = append(dto.Ticks, i.(*tickDayDto).Ticks...)
+	}
+}
+
+func GetTicksDate(client Client, pool *Pool, tickLte int, tickGte int, direction OrderDirection, date time.Time) ([]Tick, error) {
+	var dto tickDayDto
+	err := client.QueryPaginated(&dto, func() Paginated {
+		return &tickCurrentDto{}
+	},
+		map[string]any{
+			"first":     graphql.Int(limit),
+			"pool":      pool.Address,
+			"tick_lte":  graphql.Int(tickLte),
+			"tick_gte":  graphql.Int(tickGte),
+			"order_by":  "tickIdx",
+			"order_dir": direction,
+			"date":      date.Unix() / secondsInDay,
+		})
+	if err != nil {
+		return nil, err
+	}
+	return dto.fromDto()
 }
