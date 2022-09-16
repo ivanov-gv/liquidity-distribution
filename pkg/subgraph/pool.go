@@ -3,6 +3,8 @@ package subgraph
 import (
 	"context"
 	"fmt"
+	"github.com/ivanov-gv/liquidity-distribution/pkg/convert"
+	"github.com/ivanov-gv/liquidity-distribution/pkg/model"
 	"math/big"
 	"strconv"
 	"time"
@@ -13,7 +15,7 @@ type tokenDto struct {
 	Symbol   string
 }
 
-func (dto *tokenDto) fromDto() (*Token, error) {
+func (dto *tokenDto) fromDto() (*model.Token, error) {
 	var err error
 
 	decimals, err := strconv.Atoi(dto.Decimals)
@@ -21,7 +23,7 @@ func (dto *tokenDto) fromDto() (*Token, error) {
 		return nil, err
 	}
 
-	return &Token{
+	return &model.Token{
 		Decimals: decimals,
 		Symbol:   dto.Symbol,
 	}, nil
@@ -40,7 +42,7 @@ type poolDto struct {
 	} `graphql:"pool(id: $id)"`
 }
 
-func (dto *poolDto) fromDto() (*Pool, error) {
+func (dto *poolDto) fromDto() (*model.Pool, error) {
 	tick, err := strconv.Atoi(dto.Pool.Tick)
 	if err != nil {
 		return nil, err
@@ -78,35 +80,22 @@ func (dto *poolDto) fromDto() (*Pool, error) {
 	}
 	token1Price := float32(_token1Price)
 
-	return &Pool{
+	return &model.Pool{
 		Address:     dto.Pool.Id,
-		Tick:        tick,
 		Token0:      *token0,
 		Token1:      *token1,
 		FeeTier:     feeTier,
-		Liquidity:   liquidity,
-		Token0Price: token0Price,
-		Token1Price: token1Price,
+		TickSpacing: convert.FeeTierToTickSpacing(feeTier),
+		PoolBase: model.PoolBase{
+			Tick:        tick,
+			Liquidity:   liquidity,
+			Token0Price: token0Price,
+			Token1Price: token1Price,
+		},
 	}, nil
 }
 
-type Token struct {
-	Decimals int
-	Symbol   string
-}
-
-type Pool struct {
-	Address     string
-	Tick        int
-	Token0      Token
-	Token1      Token
-	FeeTier     int
-	Liquidity   *big.Int
-	Token0Price float32
-	Token1Price float32
-}
-
-func NewPool(client Client, address string) (*Pool, error) {
+func GetPool(client Client, address string) (*model.Pool, error) {
 	var query poolDto
 	err := client.Query(context.Background(), &query,
 		map[string]any{
@@ -129,7 +118,7 @@ type poolDayDto struct {
 	// where date is a timestamp rounded to current day by dividing by secondsInDay = 86400
 }
 
-func (dto *poolDayDto) fromDto() (*PoolDay, error) {
+func (dto *poolDayDto) fromDto() (*model.PoolDay, error) {
 	date := time.Unix(dto.PoolDayData.Date, 0)
 
 	tick, err := strconv.Atoi(dto.PoolDayData.Tick)
@@ -154,24 +143,18 @@ func (dto *poolDayDto) fromDto() (*PoolDay, error) {
 	}
 	token1Price := float32(_token1Price)
 
-	return &PoolDay{
-		Date:        date,
-		Tick:        tick,
-		Liquidity:   liquidity,
-		Token0Price: token0Price,
-		Token1Price: token1Price,
+	return &model.PoolDay{
+		Date: date,
+		PoolBase: model.PoolBase{
+			Tick:        tick,
+			Liquidity:   liquidity,
+			Token0Price: token0Price,
+			Token1Price: token1Price,
+		},
 	}, nil
 }
 
-type PoolDay struct {
-	Date        time.Time
-	Tick        int
-	Liquidity   *big.Int
-	Token0Price float32
-	Token1Price float32
-}
-
-func NewPoolDay(client Client, pool *Pool, date time.Time) (*PoolDay, error) {
+func GetPoolDay(client Client, pool *model.Pool, date time.Time) (*model.PoolDay, error) {
 	var query poolDayDto
 	timestamp := date.Unix() / secondsInDay
 	err := client.Query(context.Background(), &query,

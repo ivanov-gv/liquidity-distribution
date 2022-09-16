@@ -2,34 +2,30 @@ package subgraph
 
 import (
 	"fmt"
+	"github.com/ivanov-gv/liquidity-distribution/pkg/model"
 	"github.com/shurcooL/graphql"
 	"math/big"
 	"strconv"
 	"time"
 )
 
-type Tick struct {
-	TickIdx      int
-	LiquidityNet *big.Int
-}
-
 type tickDto struct {
 	LiquidityNet string `graphql:"liquidityNet"`
 	TickIdx      string `graphql:"tickIdx"`
 }
 
-func (dto tickDto) fromDto() (Tick, error) {
+func (dto tickDto) fromDto() (model.Tick, error) {
 	liquidityNet, success := new(big.Int).SetString(dto.LiquidityNet, 10)
 	if !success {
-		return Tick{}, fmt.Errorf("got error while converting liquidityNet to big.Int")
+		return model.Tick{}, fmt.Errorf("got error while converting liquidityNet to big.Int")
 	}
 
 	tickIdx, err := strconv.Atoi(dto.TickIdx)
 	if err != nil {
-		return Tick{}, err
+		return model.Tick{}, err
 	}
 
-	return Tick{
+	return model.Tick{
 		TickIdx:      tickIdx,
 		LiquidityNet: liquidityNet,
 	}, nil
@@ -39,8 +35,8 @@ type tickCurrentDto struct {
 	Ticks []tickDto `graphql:"ticks(first: $first, orderBy: $order_by, orderDirection: $order_dir, where: {pool: $pool, tickIdx_lte: $tick_lte, tickIdx_gte: $tick_gte})"`
 }
 
-func (dto *tickCurrentDto) fromDto() ([]Tick, error) {
-	ticks := make([]Tick, len(dto.Ticks))
+func (dto *tickCurrentDto) fromDto() ([]model.Tick, error) {
+	ticks := make([]model.Tick, len(dto.Ticks))
 	for i, _tickDto := range dto.Ticks {
 		tick, err := _tickDto.fromDto()
 		if err != nil {
@@ -81,7 +77,7 @@ func (dto *tickCurrentDto) Append(elem ...Paginated) {
 	}
 }
 
-func GetTicks(client Client, pool *Pool, lowerTick int, upperTick int, direction OrderDirection) ([]Tick, error) {
+func GetTicks(client Client, pool *model.Pool, lowerTick int, upperTick int, direction OrderDirection) ([]model.Tick, error) {
 	var dto tickCurrentDto
 	err := client.QueryPaginated(&dto, func() Paginated {
 		return &tickCurrentDto{}
@@ -104,8 +100,8 @@ type tickDayDto struct {
 	Ticks []tickDto `graphql:"tickDayDatas(first: $first, orderBy: $order_by, orderDirection: $order_dir, where: {pool: $pool, date: $date, tick_lte: $tick_lte, tick_gte: $tick_gte})"`
 }
 
-func (dto *tickDayDto) fromDto() ([]Tick, error) {
-	ticks := make([]Tick, len(dto.Ticks))
+func (dto *tickDayDto) fromDto() ([]model.Tick, error) {
+	ticks := make([]model.Tick, len(dto.Ticks))
 	for i, _tickDto := range dto.Ticks {
 		tick, err := _tickDto.fromDto()
 		if err != nil {
@@ -146,7 +142,7 @@ func (dto *tickDayDto) Append(elem ...Paginated) {
 	}
 }
 
-func GetTicksDate(client Client, pool *Pool, tickLte int, tickGte int, direction OrderDirection, date time.Time) ([]Tick, error) {
+func GetTicksDate(client Client, pool *model.Pool, tickLte int, tickGte int, direction OrderDirection, date time.Time) ([]model.Tick, error) {
 	var dto tickDayDto
 	err := client.QueryPaginated(&dto, func() Paginated {
 		return &tickCurrentDto{}
